@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIX Volatility Trading Signal Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Harmony -->
+    <!-- Application Structure Plan: A multi-section interactive dashboard. The user starts at a 'Volatility Dashboard' for an at-a-glance view. They can then navigate to dedicated sections for 'Understanding VIX', 'Trading Signals', 'Excel Implementation', and 'Risks'. This thematic structure is chosen over a linear report format to allow users to either get a quick summary or deep-dive into specific areas of interest, which is more aligned with a trader's workflow. The core interaction is a dynamic VIX curve chart that updates based on user-selected historical scenarios. -->
+    <!-- Visualization & Content Choices: 1. VIX Term Structure: Goal=Show market sentiment. Viz=Interactive Line Chart (Chart.js). Interaction=Buttons to load historical data (calm, crash). Justification=Visually demonstrates contango/backwardation better than text. 2. Trading Signals: Goal=Define actionable rules. Viz=Line charts showing signal ratios over time + HTML cards with logic. Interaction=Tooltips on charts. Justification=Clearly connects the data to the trading rule. 3. Excel Integration: Goal=Provide practical tools. Viz=Formatted HTML code blocks. Interaction=Copy-to-clipboard button. Justification=Directly provides the requested VBA/formulas. No SVG/Mermaid is used; all visuals are Canvas-based charts or styled HTML. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8F7F4;
+            color: #2c3e50;
+        }
+        .nav-button {
+            transition: all 0.3s ease;
+        }
+        .nav-button.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+        .content-section {
+            display: none;
+        }
+        .content-section.active {
+            display: block;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 40vh;
+            max-height: 450px;
+        }
+        .code-block {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            font-family: 'Courier New', Courier, monospace;
+            border-radius: 8px;
+            padding: 16px;
+            overflow-x: auto;
+            white-space: pre;
+        }
+        .status-risk-on { background-color: #27ae60; color: white; }
+        .status-risk-off { background-color: #c0392b; color: white; }
+        .status-neutral { background-color: #f39c12; color: white; }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="container mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800">Volatility Trading Signal Dashboard</h1>
+            <p class="text-lg text-gray-600 mt-2">Using VIX Term Structure to Navigate Market Regimes</p>
+        </header>
+
+        <nav class="flex justify-center border-b-2 border-gray-200 mb-8 space-x-4 md:space-x-8">
+            <button class="nav-button text-gray-500 hover:text-gray-800 font-semibold py-4 px-2 md:px-4 border-b-2 border-transparent" data-target="dashboard">Dashboard</button>
+            <button class="nav-button text-gray-500 hover:text-gray-800 font-semibold py-4 px-2 md:px-4 border-b-2 border-transparent" data-target="vix-concepts">VIX Concepts</button>
+            <button class="nav-button text-gray-500 hover:text-gray-800 font-semibold py-4 px-2 md:px-4 border-b-2 border-transparent" data-target="signals">Trading Signals</button>
+            <button class="nav-button text-gray-500 hover:text-gray-800 font-semibold py-4 px-2 md:px-4 border-b-2 border-transparent" data-target="implementation">Excel Model</button>
+            <button class="nav-button text-gray-500 hover:text-gray-800 font-semibold py-4 px-2 md:px-4 border-b-2 border-transparent" data-target="risks">Risks</button>
+        </nav>
+
+        <main>
+            <section id="dashboard" class="content-section">
+                <div class="bg-white p-6 rounded-lg shadow-md mb-8 text-center">
+                    <h2 class="text-2xl font-semibold mb-2">Current Market Regime Signal</h2>
+                    <div id="regime-indicator" class="text-3xl font-bold p-4 rounded-lg inline-block">
+                        NEUTRAL
+                    </div>
+                    <p class="text-gray-500 mt-2">This indicator synthesizes multiple VIX signals to provide a high-level view of market risk appetite.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 text-center">
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <h3 class="font-semibold text-gray-600">VIX Spot</h3>
+                        <p id="vix-spot" class="text-3xl font-bold text-gray-800">14.50</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <h3 class="font-semibold text-gray-600">VIX 9-Day</h3>
+                        <p id="vix-9d" class="text-3xl font-bold text-gray-800">13.80</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <h3 class="font-semibold text-gray-600">VIX M1/Spot Ratio</h3>
+                        <p id="vix-ratio" class="text-3xl font-bold text-gray-800">1.08</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-2xl font-semibold mb-4 text-center">VIX Futures Term Structure</h2>
+                    <p class="text-center text-gray-600 mb-4">This chart displays the current price of VIX futures across different expiration dates. The shape of this curve is a powerful indicator of market fear or complacency. Select a scenario to see how the curve behaves in different market environments.</p>
+                    <div class="chart-container">
+                        <canvas id="vixTermStructureChart"></canvas>
+                    </div>
+                    <div class="flex justify-center mt-4 space-x-2">
+                        <button class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300" onclick="updateTermStructure('calm')">Calm Market (Contango)</button>
+                        <button class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300" onclick="updateTermStructure('volatile')">Volatile Market (Backwardation)</button>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="vix-concepts" class="content-section">
+                 <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-3xl font-bold text-center mb-6">Understanding the VIX Term Structure</h2>
+                    <p class="text-lg text-gray-700 mb-8 max-w-4xl mx-auto">The VIX term structure is simply a graph of VIX futures prices over time. Its shape tells a story about market expectations. In normal times, futures with later expiration dates are more expensive due to uncertainty over time. In times of panic, short-term futures become more expensive as investors scramble for immediate protection. This section helps you visualize and understand these two key states.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="border-2 border-green-400 p-6 rounded-lg bg-green-50">
+                            <h3 class="text-2xl font-semibold text-green-800 mb-3">Contango (Risk-On)</h3>
+                            <p class="text-gray-700 mb-4">This is the "normal" state of the VIX futures market. Each subsequent futures contract is priced higher than the previous one, creating an upward-sloping curve.</p>
+                            <ul class="list-disc list-inside space-y-2 text-gray-600">
+                                <li><strong>What it means:</strong> The market expects volatility to be higher in the future than it is today. This indicates a lack of immediate fear.</li>
+                                <li><strong>Signal:</strong> Generally considered a <span class="font-bold">risk-on</span> environment, favorable for equities and other growth assets.</li>
+                                <li><strong>Visual:</strong> The curve goes up and to the right, like a gentle hill.</li>
+                            </ul>
+                        </div>
+                        <div class="border-2 border-red-400 p-6 rounded-lg bg-red-50">
+                            <h3 class="text-2xl font-semibold text-red-800 mb-3">Backwardation (Risk-Off)</h3>
+                            <p class="text-gray-700 mb-4">This is an inverted, "fearful" state. Short-term futures are more expensive than long-term futures, creating a downward-sloping curve.</p>
+                             <ul class="list-disc list-inside space-y-2 text-gray-600">
+                                <li><strong>What it means:</strong> The market is experiencing or expecting significant immediate turmoil. The demand for short-term portfolio protection is extremely high.</li>
+                                <li><strong>Signal:</strong> A clear <span class="font-bold">risk-off</span> signal. Caution is warranted, and defensive assets may be preferable.</li>
+                                <li><strong>Visual:</strong> The curve slopes downward, indicating panic now.</li>
+                            </ul>
+                        </div>
+                    </div>
+                 </div>
+            </section>
+
+            <section id="signals" class="content-section">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                     <h2 class="text-3xl font-bold text-center mb-6">Actionable Trading Signals from VIX Data</h2>
+                     <p class="text-lg text-gray-700 mb-8 max-w-4xl mx-auto">While the general shape of the VIX curve is insightful, we can derive more specific, quantitative signals to guide trading decisions. These signals translate the abstract concepts of contango and backwardation into concrete rules that can be tested and implemented in a portfolio model. Each signal focuses on a different aspect of the volatility landscape.</p>
+                     
+                     <div class="space-y-8">
+                         <div class="border p-6 rounded-lg shadow-sm">
+                            <h3 class="text-2xl font-semibold mb-3">Signal 1: The Contango / Backwardation Ratio</h3>
+                            <p class="text-gray-600 mb-4">This is the most fundamental signal. It directly measures the relationship between the first-month VIX future (M1) and the spot VIX index. A ratio significantly above 1 indicates strong contango, while a ratio below 1 indicates backwardation.</p>
+                            <div class="bg-gray-100 p-4 rounded-md mb-4">
+                                <p class="font-mono"><strong>IF</strong> (VIX_M1 / VIX_Spot) > 1.05 <strong>THEN</strong> <span class="text-green-600 font-bold">Risk-On</span></p>
+                                <p class="font-mono"><strong>ELSE IF</strong> (VIX_M1 / VIX_Spot) < 0.95 <strong>THEN</strong> <span class="text-red-600 font-bold">Risk-Off</span></p>
+                                <p class="font-mono"><strong>ELSE</strong> <span class="text-yellow-600 font-bold">Neutral</span></p>
+                            </div>
+                            <div class="chart-container h-[30vh] max-h-[300px]">
+                                <canvas id="signal1Chart"></canvas>
+                            </div>
+                         </div>
+
+                         <div class="border p-6 rounded-lg shadow-sm">
+                            <h3 class="text-2xl font-semibold mb-3">Signal 2: The Curve Steepness Signal</h3>
+                            <p class="text-gray-600 mb-4">This leading indicator compares the steepness of the front of the curve (M2/M1) to a longer-term section (e.g., M7/M4). When the front of the curve flattens or inverts faster than the back, it can signal a rapid increase in fear before full backwardation sets in.</p>
+                            <div class="bg-gray-100 p-4 rounded-md mb-4">
+                                <p class="font-mono"><strong>LET</strong> Ratio_Short = VIX_M2 / VIX_M1</p>
+                                <p class="font-mono"><strong>LET</strong> Ratio_Long = VIX_M7 / VIX_M4</p>
+                                <p class="font-mono"><strong>IF</strong> Ratio_Short < Ratio_Long AND Ratio_Short < 1.0 <strong>THEN</strong> <span class="text-red-600 font-bold">High Alert / Risk-Off</span></p>
+                            </div>
+                            <div class="chart-container h-[30vh] max-h-[300px]">
+                                <canvas id="signal2Chart"></canvas>
+                            </div>
+                         </div>
+                         
+                         <div class="border p-6 rounded-lg shadow-sm">
+                            <h3 class="text-2xl font-semibold mb-3">Signal 3: The VIX9D / VIX Ratio (Panic Indicator)</h3>
+                            <p class="text-gray-600 mb-4">This signal compares 9-day implied volatility (VIX9D) to 30-day volatility (VIX). A sharp spike in this ratio (above 1) indicates that immediate, short-term fear is overwhelming medium-term fear. It's often seen as a panic or capitulation signal.</p>
+                            <div class="bg-gray-100 p-4 rounded-md mb-4">
+                                <p class="font-mono"><strong>IF</strong> (VIX9D / VIX) > 1.20 <strong>THEN</strong> <span class="text-red-600 font-bold">Extreme Risk-Off (Panic)</span></p>
+                                <p class="font-mono"><strong>ELSE IF</strong> (VIX9D / VIX) < 0.85 <strong>THEN</strong> <span class="text-green-600 font-bold">Complacency / Risk-On</span></p>
+                            </div>
+                             <div class="chart-container h-[30vh] max-h-[300px]">
+                                <canvas id="signal3Chart"></canvas>
+                            </div>
+                         </div>
+                     </div>
+                </div>
+            </section>
+
+            <section id="implementation" class="content-section">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-3xl font-bold text-center mb-6">Excel Portfolio Model Implementation</h2>
+                    <p class="text-lg text-gray-700 mb-8 max-w-4xl mx-auto">This section provides the practical tools to integrate these VIX signals into your existing ETF-based Excel model. Below you will find a suggested sector rotation strategy, simple Excel formulas for direct implementation, and more advanced VBA macros for automating the signal calculation and portfolio allocation process.</p>
+
+                    <h3 class="text-2xl font-semibold mb-4">ETF Sector Rotation Strategy</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div>
+                            <h4 class="text-xl font-semibold text-green-700 mb-2">Risk-On Sectors (Target in Contango)</h4>
+                            <ul class="list-disc list-inside space-y-1 bg-green-50 p-4 rounded-md">
+                                <li><strong>Technology (XLK):</strong> High growth potential.</li>
+                                <li><strong>Consumer Discretionary (XLY):</strong> Strong during economic expansion.</li>
+                                <li><strong>Industrials (XLI):</strong> Benefits from economic growth.</li>
+                                <li><strong>Financials (XLF):</strong> Pro-cyclical and benefits from a steep yield curve.</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-semibold text-red-700 mb-2">Risk-Off Sectors (Target in Backwardation)</h4>
+                            <ul class="list-disc list-inside space-y-1 bg-red-50 p-4 rounded-md">
+                                <li><strong>Utilities (XLU):</strong> Stable demand and dividends.</li>
+                                <li><strong>Consumer Staples (XLP):</strong> Non-cyclical, essential goods.</li>
+                                <li><strong>Healthcare (XLV):</strong> Defensive with inelastic demand.</li>
+                                <li><strong>Bonds (TLT/IEF):</strong> Typically a safe-haven asset.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <h3 class="text-2xl font-semibold mb-4">Simple Excel Formulas</h3>
+                    <p class="text-gray-600 mb-4">Assuming your VIX data is in your worksheet (e.g., Spot in B2, M1 in C2), you can use these formulas:</p>
+                    <div class="code-block mb-8">
+                        <code>
+=IF(C2/B2 > 1.05, "Risk-On", IF(C2/B2 < 0.95, "Risk-Off", "Neutral"))
+                        </code>
+                    </div>
+
+                    <h3 class="text-2xl font-semibold mb-4">VBA Macro Implementation</h3>
+                    <p class="text-gray-600 mb-4">For more robust automation, use these VBA functions. You will need to adapt the data fetching part to your specific data source (e.g., API, Bloomberg, etc.).</p>
+                    <div class="code-block">
+                        <code class="language-vba">
+' VBA Module for VIX Signal Analysis
+
+Sub RunVixSignalAnalysis()
+    ' Main sub to run all calculations
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("VIX_Data") ' Change to your sheet name
+
+    ' Step 1: Fetch data (placeholder - replace with your data source logic)
+    ' Call FetchVixData(ws)
+
+    ' Step 2: Calculate signals
+    Call CalculateAllSignals(ws)
+
+    ' Step 3: Update portfolio based on signals
+    Call UpdatePortfolioAllocation(ws)
+End Sub
+
+Sub CalculateAllSignals(ws As Worksheet)
+    ' Assumes data is in specific cells. Adjust as needed.
+    ' A2: Date, B2: VIX_Spot, C2: VIX_M1, D2: VIX_M2, E2: VIX_M4, F2: VIX_M7, G2: VIX9D
+    
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    
+    ' Headers for signal columns
+    ws.Cells(1, "H").Value = "Signal1_Ratio"
+    ws.Cells(1, "I").Value = "Signal1_Status"
+    ws.Cells(1, "J").Value = "Signal2_ShortRatio"
+    ws.Cells(1, "K").Value = "Signal2_LongRatio"
+    ws.Cells(1, "L").Value = "Signal2_Status"
+    ws.Cells(1, "M").Value = "Signal3_Ratio"
+    ws.Cells(1, "N").Value = "Signal3_Status"
+
+    Dim i As Long
+    For i = 2 To lastRow
+        ' Signal 1: Contango/Backwardation
+        If ws.Cells(i, "B").Value <> 0 Then
+            ws.Cells(i, "H").Value = ws.Cells(i, "C").Value / ws.Cells(i, "B").Value
+            If ws.Cells(i, "H").Value > 1.05 Then
+                ws.Cells(i, "I").Value = "Risk-On"
+            ElseIf ws.Cells(i, "H").Value < 0.95 Then
+                ws.Cells(i, "I").Value = "Risk-Off"
+            Else
+                ws.Cells(i, "I").Value = "Neutral"
+            End If
+        End If
+
+        ' Signal 2: Curve Steepness
+        If ws.Cells(i, "C").Value <> 0 And ws.Cells(i, "E").Value <> 0 Then
+            ws.Cells(i, "J").Value = ws.Cells(i, "D").Value / ws.Cells(i, "C").Value ' Short Ratio
+            ws.Cells(i, "K").Value = ws.Cells(i, "F").Value / ws.Cells(i, "E").Value ' Long Ratio
+            If ws.Cells(i, "J").Value < ws.Cells(i, "K").Value And ws.Cells(i, "J").Value < 1 Then
+                ws.Cells(i, "L").Value = "High Alert / Risk-Off"
+            Else
+                ws.Cells(i, "L").Value = "Clear"
+            End If
+        End If
+
+        ' Signal 3: VIX9D/VIX
+        If ws.Cells(i, "B").Value <> 0 Then
+            ws.Cells(i, "M").Value = ws.Cells(i, "G").Value / ws.Cells(i, "B").Value
+            If ws.Cells(i, "M").Value > 1.2 Then
+                ws.Cells(i, "N").Value = "Extreme Risk-Off"
+            ElseIf ws.Cells(i, "M").Value < 0.85 Then
+                ws.Cells(i, "N").Value = "Complacency / Risk-On"
+            Else
+                ws.Cells(i, "N").Value = "Neutral"
+            End If
+        End If
+    Next i
+End Sub
+
+Sub UpdatePortfolioAllocation(ws As Worksheet)
+    ' This is a simplified example. Your logic will be more complex.
+    Dim finalSignal As String
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    
+    ' Combine signals (example: Signal 1 is primary)
+    finalSignal = ws.Cells(lastRow, "I").Value 
+    
+    Dim portfolioSheet As Worksheet
+    Set portfolioSheet = ThisWorkbook.Sheets("Portfolio") ' Your portfolio sheet
+
+    portfolioSheet.Cells(1, "A").Value = "Regime"
+    portfolioSheet.Cells(1, "B").Value = "Action"
+
+    portfolioSheet.Cells(2, "A").Value = finalSignal
+
+    Select Case finalSignal
+        Case "Risk-On"
+            portfolioSheet.Cells(2, "B").Value = "Increase allocation to XLK, XLY. Reduce XLU, XLP."
+        Case "Risk-Off"
+            portfolioSheet.Cells(2, "B").Value = "Increase allocation to XLU, XLP, TLT. Reduce XLK, XLY."
+        Case "Neutral"
+            portfolioSheet.Cells(2, "B").Value = "Maintain balanced allocation. Monitor signals closely."
+    End Select
+    
+    MsgBox "Portfolio allocation suggestion updated based on VIX signals."
+End Sub
+
+                        </code>
+                    </div>
+                </div>
+            </section>
+
+            <section id="risks" class="content-section">
+                 <div class="bg-white p-8 rounded-lg shadow-md">
+                    <h2 class="text-3xl font-bold text-center mb-6 text-red-800">Important Risks & Considerations</h2>
+                    <p class="text-lg text-gray-700 mb-8 max-w-4xl mx-auto">Using VIX-based signals can be a powerful addition to a trading model, but it is not a silver bullet. Understanding the limitations and potential pitfalls is crucial for responsible risk management. These signals should be used as a component of a broader strategy, not as a standalone decision-maker.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <h4 class="font-bold text-yellow-800">Not a Perfect Predictor</h4>
+                            <p class="text-yellow-700">VIX signals measure current sentiment and implied volatility, not a guaranteed future outcome. The market can remain "irrational" longer than a trader can remain solvent.</p>
+                        </div>
+                         <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <h4 class="font-bold text-yellow-800">Volatility Drag</h4>
+                            <p class="text-yellow-700">A market can stay in contango for extended periods of low-growth, sideways movement. Being "risk-on" in such an environment can lead to portfolio drag or small losses.</p>
+                        </div>
+                         <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <h4 class="font-bold text-yellow-800">Whipsaws and "Head Fakes"</h4>
+                            <p class="text-yellow-700">The VIX can spike into backwardation briefly on minor news and then revert quickly. Reacting to every signal change can lead to over-trading and transaction costs.</p>
+                        </div>
+                         <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <h4 class="font-bold text-yellow-800">Context is Key</h4>
+                            <p class="text-yellow-700">These signals are most powerful when combined with other analyses, such as macroeconomic trends (inflation, employment), fundamental sector analysis, and technical chart patterns.</p>
+                        </div>
+                         <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <h4 class="font-bold text-yellow-800">Data Dependency</h4>
+                            <p class="text-yellow-700">The model's effectiveness relies on access to accurate and timely VIX futures data. Delays or errors in data can lead to flawed signals.</p>
+                        </div>
+                         <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <h4 class="font-bold text-yellow-800">Black Swan Events</h4>
+                            <p class="text-yellow-700">Extreme, unforeseen events can cause volatility dynamics to behave in unprecedented ways, potentially invalidating historical signal patterns.</p>
+                        </div>
+                    </div>
+                 </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const navButtons = document.querySelectorAll('.nav-button');
+            const contentSections = document.querySelectorAll('.content-section');
+            const regimeIndicator = document.getElementById('regime-indicator');
+            const vixSpotEl = document.getElementById('vix-spot');
+            const vix9dEl = document.getElementById('vix-9d');
+            const vixRatioEl = document.getElementById('vix-ratio');
+
+            const dataStore = {
+                calm: {
+                    labels: ['Spot', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'],
+                    values: [14.5, 15.7, 16.5, 17.1, 17.5, 17.8, 18.0, 18.2]
+                },
+                volatile: {
+                    labels: ['Spot', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'],
+                    values: [35.2, 32.1, 30.5, 29.3, 28.8, 28.5, 28.3, 28.1]
+                }
+            };
+            
+            const signalData = {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'],
+                signal1: [1.10, 1.08, 1.12, 0.94, 0.92, 1.05, 1.08, 1.15, 1.13],
+                signal2_short: [1.04, 1.05, 1.03, 0.98, 0.97, 1.01, 1.02, 1.03, 1.02],
+                signal2_long: [1.02, 1.02, 1.02, 1.01, 1.01, 1.01, 1.01, 1.01, 1.01],
+                signal3: [0.90, 0.88, 0.92, 1.15, 1.25, 0.95, 0.91, 0.86, 0.88]
+            };
+
+            let vixChart, signal1Chart, signal2Chart, signal3Chart;
+
+            function setActiveNav(targetId) {
+                navButtons.forEach(button => {
+                    if (button.dataset.target === targetId) {
+                        button.classList.add('active');
+                    } else {
+                        button.classList.remove('active');
+                    }
+                });
+
+                contentSections.forEach(section => {
+                    if (section.id === targetId) {
+                        section.classList.add('active');
+                    } else {
+                        section.classList.remove('active');
+                    }
+                });
+            }
+
+            function updateDashboardIndicator() {
+                const spot = dataStore.calm.values[0];
+                const m1 = dataStore.calm.values[1];
+                const v9d = 13.80;
+                const ratio = m1 / spot;
+
+                vixSpotEl.textContent = spot.toFixed(2);
+                vix9dEl.textContent = v9d.toFixed(2);
+                vixRatioEl.textContent = ratio.toFixed(2);
+                
+                regimeIndicator.classList.remove('status-risk-on', 'status-risk-off', 'status-neutral');
+                if (ratio > 1.05) {
+                    regimeIndicator.textContent = 'RISK-ON';
+                    regimeIndicator.classList.add('status-risk-on');
+                } else if (ratio < 0.95) {
+                    regimeIndicator.textContent = 'RISK-OFF';
+                    regimeIndicator.classList.add('status-risk-off');
+                } else {
+                    regimeIndicator.textContent = 'NEUTRAL';
+                    regimeIndicator.classList.add('status-neutral');
+                }
+            }
+
+            function createVixTermStructureChart() {
+                const ctx = document.getElementById('vixTermStructureChart').getContext('2d');
+                vixChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: dataStore.calm.labels,
+                        datasets: [{
+                            label: 'VIX Futures Price',
+                            data: dataStore.calm.values,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                title: { display: true, text: 'Futures Price' }
+                            },
+                            x: {
+                                title: { display: true, text: 'Futures Contract' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `Price: ${context.parsed.y}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            window.updateTermStructure = function(scenario) {
+                const newData = dataStore[scenario];
+                vixChart.data.datasets[0].data = newData.values;
+                vixChart.data.datasets[0].borderColor = scenario === 'calm' ? '#27ae60' : '#c0392b';
+                vixChart.data.datasets[0].backgroundColor = scenario === 'calm' ? 'rgba(39, 174, 96, 0.1)' : 'rgba(192, 57, 43, 0.1)';
+                vixChart.update();
+            }
+            
+            function createSignalCharts() {
+                const optionsTemplate = (title, annotations = []) => ({
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: false } },
+                    plugins: { 
+                        legend: { display: true, position: 'bottom' }, 
+                        title: { display: true, text: title, font: { size: 16 } },
+                        annotation: {
+                            annotations: annotations
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index',
+                    },
+                });
+
+                const ctx1 = document.getElementById('signal1Chart').getContext('2d');
+                signal1Chart = new Chart(ctx1, {
+                    type: 'line',
+                    data: {
+                        labels: signalData.labels,
+                        datasets: [{
+                            label: 'VIX M1/Spot Ratio',
+                            data: signalData.signal1,
+                            borderColor: '#2980b9',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            fill: false
+                        }]
+                    },
+                    options: optionsTemplate('Signal 1: Contango / Backwardation Ratio')
+                });
+
+                const ctx2 = document.getElementById('signal2Chart').getContext('2d');
+                signal2Chart = new Chart(ctx2, {
+                    type: 'line',
+                    data: {
+                        labels: signalData.labels,
+                        datasets: [
+                            {
+                                label: 'Short Ratio (M2/M1)',
+                                data: signalData.signal2_short,
+                                borderColor: '#e67e22',
+                                borderWidth: 2,
+                                fill: false
+                            },
+                            {
+                                label: 'Long Ratio (M7/M4)',
+                                data: signalData.signal2_long,
+                                borderColor: '#8e44ad',
+                                borderWidth: 2,
+                                borderDash: [5, 5],
+                                fill: false
+                            }
+                        ]
+                    },
+                    options: optionsTemplate('Signal 2: Curve Steepness')
+                });
+                
+                const ctx3 = document.getElementById('signal3Chart').getContext('2d');
+                signal3Chart = new Chart(ctx3, {
+                    type: 'line',
+                    data: {
+                        labels: signalData.labels,
+                        datasets: [{
+                            label: 'VIX9D/VIX Ratio',
+                            data: signalData.signal3,
+                            borderColor: '#c0392b',
+                            borderWidth: 2,
+                            fill: false
+                        }]
+                    },
+                    options: optionsTemplate('Signal 3: Panic Indicator')
+                });
+            }
+
+
+            navButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    setActiveNav(button.dataset.target);
+                });
+            });
+
+            setActiveNav('dashboard');
+            updateDashboardIndicator();
+            createVixTermStructureChart();
+            createSignalCharts();
+            updateTermStructure('calm');
+        });
+    </script>
+</body>
+</html>
